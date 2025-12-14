@@ -1,13 +1,24 @@
-let idleSheet, walkSheet, jumpSheet, attackSheet, projectileSheet;
+let idleSheet, walkSheet, jumpSheet, attackSheet, projectileSheet, partnerSheet, partner2Sheet, partner2TouchSheet, partnerSmileSheet, partnerFallSheet;
 let idleAnim = [];
 let walkAnim = [];
 let jumpAnim = [];
 let attackAnim = [];
 let projectileAnim = [];
+let partnerAnim = [];
+let partnerSmileAnim = [];
+let partner2Anim = [];
+let partnerFallAnim = [];
+let partner2TouchAnim = [];
 let projectiles = []; // 用於存放所有投射物
+let partnerMessage = "需要我解答嗎?";
+let inputField;
 
 // 角色位置與狀態
 let characterX, characterY;
+let partnerState = 'normal'; // 'normal', 'falling', 'fallen'
+let partnerFallCurrentFrame = 0;
+let partnerX, partnerY; // 新角色的獨立位置變數
+let partner2X, partner2Y; // 右邊新角色的獨立位置變數
 let speed = 5;
 let direction = 'idle'; // 'idle', 'walk'
 let facing = 'right';   // 'left', 'right'
@@ -47,6 +58,30 @@ const projectileSheetWidth = 291;
 const projectileSheetHeight = 102;
 let projectileFrameWidth;
 
+// 新角色動畫的設定
+const partnerFrameCount = 7;
+const partnerSheetWidth = 450;
+const partnerSheetHeight = 84;
+let partnerFrameWidth;
+
+// 新角色(左邊) Smile 動畫的設定
+const partnerSmileFrameCount = 8;
+const partnerSmileSheetWidth = 435;
+const partnerSmileSheetHeight = 84;
+let partnerSmileFrameWidth;
+
+// 新角色(左邊) Fall Down 動畫的設定
+const partnerFallFrameCount = 7;
+const partnerFallSheetWidth = 667;
+const partnerFallSheetHeight = 69;
+let partnerFallFrameWidth;
+
+// 右邊新角色動畫的設定
+const partner2FrameCount = 8;
+const partner2SheetWidth = 491;
+const partner2SheetHeight = 70;
+let partner2FrameWidth;
+
 function preload() {
   // 預先載入站立與走路的圖片精靈檔案
   idleSheet = loadImage('1/stop/stop_all_1.png');
@@ -54,6 +89,11 @@ function preload() {
   jumpSheet = loadImage('1/jump/jump_all_1.png');
   attackSheet = loadImage('1/發瘋/發瘋_all_1.png');
   projectileSheet = loadImage('1/特效/特效_all_1.png');
+  partnerSheet = loadImage('2/stop/stop_2.png');
+  partner2Sheet = loadImage('3/stop/stop_3.png');
+  partner2TouchSheet = loadImage('3/touch/touch_3.png');
+  partnerSmileSheet = loadImage('2/smile/smile_2.png');
+  partnerFallSheet = loadImage('2/fall_down/fall_down_2.png');
 }
 
 function setup() {
@@ -63,6 +103,14 @@ function setup() {
   // 初始化角色位置在畫面中央
   characterX = windowWidth / 2;
   characterY = windowHeight / 2;
+
+  // 初始化新角色位置 (固定在初始畫面的左方，不受主角後續移動影響)
+  partnerX = characterX - 250;
+  partnerY = characterY;
+
+  // 初始化右邊新角色位置 (固定在初始畫面的右方，不受主角後續移動影響)
+  partner2X = characterX + 250;
+  partner2Y = characterY;
 
   // --- 切割站立動畫 ---
   idleFrameWidth = idleSheetWidth / idleFrameCount;
@@ -97,6 +145,41 @@ function setup() {
   for (let i = 0; i < projectileFrameCount; i++) {
     let frame = projectileSheet.get(i * projectileFrameWidth, 0, projectileFrameWidth, projectileSheetHeight);
     projectileAnim.push(frame);
+  }
+
+  // --- 切割新角色動畫 ---
+  partnerFrameWidth = partnerSheetWidth / partnerFrameCount;
+  for (let i = 0; i < partnerFrameCount; i++) {
+    let frame = partnerSheet.get(i * partnerFrameWidth, 0, partnerFrameWidth, partnerSheetHeight);
+    partnerAnim.push(frame);
+  }
+
+  // --- 切割新角色(左邊) Smile 動畫 ---
+  partnerSmileFrameWidth = partnerSmileSheetWidth / partnerSmileFrameCount;
+  for (let i = 0; i < partnerSmileFrameCount; i++) {
+    let frame = partnerSmileSheet.get(i * partnerSmileFrameWidth, 0, partnerSmileFrameWidth, partnerSmileSheetHeight);
+    partnerSmileAnim.push(frame);
+  }
+
+  // --- 切割新角色(左邊) Fall Down 動畫 ---
+  partnerFallFrameWidth = partnerFallSheetWidth / partnerFallFrameCount;
+  for (let i = 0; i < partnerFallFrameCount; i++) {
+    let frame = partnerFallSheet.get(i * partnerFallFrameWidth, 0, partnerFallFrameWidth, partnerFallSheetHeight);
+    partnerFallAnim.push(frame);
+  }
+
+  // --- 切割右邊新角色動畫 ---
+  partner2FrameWidth = partner2SheetWidth / partner2FrameCount;
+  for (let i = 0; i < partner2FrameCount; i++) {
+    let frame = partner2Sheet.get(i * partner2FrameWidth, 0, partner2FrameWidth, partner2SheetHeight);
+    partner2Anim.push(frame);
+  }
+
+  // --- 切割右邊新角色 Touch 動畫 ---
+  // 圖片規格與 partner2Sheet 相同 (491x70, 8 frames)
+  for (let i = 0; i < partner2FrameCount; i++) {
+    let frame = partner2TouchSheet.get(i * partner2FrameWidth, 0, partner2FrameWidth, partner2SheetHeight);
+    partner2TouchAnim.push(frame);
   }
 }
 
@@ -144,7 +227,7 @@ function draw() {
     }
   } else {
     // --- 處理地面邏輯 (走路/站立) ---
-    if (keyIsDown(32)) { // 32 是空白鍵的 key code
+    if (keyIsDown(DOWN_ARROW)) { // 改為按下往下鍵觸發攻擊
       isAttacking = true;
       direction = 'idle'; // 攻擊時站立
     } else if (keyIsDown(UP_ARROW)) {
@@ -163,6 +246,106 @@ function draw() {
       direction = 'idle';
     }
   }
+
+  // --- 繪製新角色 (在原角色左邊) ---
+  push();
+  translate(partnerX, partnerY); // 使用獨立的座標，不受鍵盤控制
+  if (characterX < partnerX) {
+    scale(-1, 1); // 如果主角在左邊，則面向左邊
+  }
+
+  // --- 檢查是否復活 (當主角靠近倒地的角色2時) ---
+  if (partnerState !== 'normal' && dist(characterX, characterY, partnerX, partnerY) < 100) {
+    partnerState = 'normal';
+    partnerFallCurrentFrame = 0;
+  }
+
+  if (partnerState === 'normal') {
+    // --- 正常狀態邏輯 (包含距離判斷與對話框) ---
+    let dPartner = dist(characterX, characterY, partnerX, partnerY);
+    let currentPartnerAnim = partnerAnim;
+    let currentPartnerFrameCount = partnerFrameCount;
+    let currentPartnerFrameWidth = partnerFrameWidth;
+
+    if (dPartner < 100) {
+      currentPartnerAnim = partnerSmileAnim;
+      currentPartnerFrameCount = partnerSmileFrameCount;
+      currentPartnerFrameWidth = partnerSmileFrameWidth;
+
+      // --- 顯示角色2上方的文字 ---
+      push();
+      if (characterX < partnerX) {
+        scale(-1, 1); // 修正文字方向，避免被角色翻轉影響文字顯示
+      }
+      textSize(20);
+      let txtWidth = textWidth(partnerMessage);
+      fill('#a8dadc');
+      rectMode(CENTER);
+      rect(0, -partnerSheetHeight / 2 - 40, txtWidth + 20, 40, 5); // 繪製文字背景方框，涵蓋文字
+      fill(0);
+      textAlign(CENTER, CENTER);
+      text(partnerMessage, 0, -partnerSheetHeight / 2 - 40);
+      pop();
+
+      // --- 顯示角色1上方的輸入框 ---
+      if (!inputField) {
+        inputField = createInput();
+        inputField.size(150);
+        inputField.changed(handleInput); // 設定按下 Enter 後的處理函式
+      }
+      inputField.position(characterX - 75, characterY - 150); // 讓輸入框跟隨角色1
+    } else {
+      // --- 當角色遠離時，移除輸入框並重置訊息 ---
+      if (inputField) {
+        inputField.remove();
+        inputField = null;
+        partnerMessage = "需要我解答嗎?";
+      }
+    }
+
+    let partnerFrameIndex = floor(frameCount / 12) % currentPartnerFrameCount;
+    image(currentPartnerAnim[partnerFrameIndex], -currentPartnerFrameWidth / 2, -partnerSheetHeight / 2);
+  } else {
+    // --- 倒地狀態邏輯 ---
+    // 確保輸入框被移除
+    if (inputField) {
+      inputField.remove();
+      inputField = null;
+      partnerMessage = "需要我解答嗎?";
+    }
+
+    if (partnerState === 'falling') {
+      if (frameCount % 10 === 0) partnerFallCurrentFrame++;
+      if (partnerFallCurrentFrame >= partnerFallFrameCount) {
+        partnerFallCurrentFrame = partnerFallFrameCount - 1; // 停在最後一幀
+        partnerState = 'fallen';
+      }
+    }
+    image(partnerFallAnim[partnerFallCurrentFrame], -partnerFallFrameWidth / 2, -partnerFallSheetHeight / 2);
+  }
+  pop();
+
+  // --- 繪製右邊新角色 ---
+  push();
+  translate(partner2X, partner2Y); // 使用獨立的座標
+  if (characterX > partner2X) {
+    scale(-1, 1); // 如果主角在右邊，則面向右邊
+  }
+
+  // 計算主角與角色3的距離
+  let d = dist(characterX, characterY, partner2X, partner2Y);
+  let currentPartner2Anim = partner2Anim;
+  let partner2Speed = 12; // 預設速度
+
+  // 當距離小於 100 時切換為 Touch 動畫 (初始距離為 100，需靠近才會觸發)
+  if (d < 100) {
+    currentPartner2Anim = partner2TouchAnim;
+    partner2Speed = 24; // 放慢 touch 動畫速度 (數字越大越慢)
+  }
+
+  let partner2FrameIndex = floor(frameCount / partner2Speed) % partner2FrameCount;
+  image(currentPartner2Anim[partner2FrameIndex], -partner2FrameWidth / 2, -partner2SheetHeight / 2);
+  pop();
 
   // --- 根據方向繪製角色 ---
   push(); // 保存當前的繪圖設定
@@ -217,6 +400,14 @@ function updateAndDrawProjectiles() {
       proj.x -= proj.speed;
     }
 
+    // --- 檢查投射物是否擊中角色2 ---
+    if (partnerState === 'normal' && dist(proj.x, proj.y, partnerX, partnerY) < 60) {
+      partnerState = 'falling';
+      partnerFallCurrentFrame = 0;
+      projectiles.splice(i, 1); // 移除投射物
+      continue; // 跳過此投射物的後續繪製
+    }
+
     // 繪製投射物
     push();
     translate(proj.x, proj.y);
@@ -231,6 +422,14 @@ function updateAndDrawProjectiles() {
     if (proj.x > windowWidth + projectileFrameWidth || proj.x < -projectileFrameWidth) {
       projectiles.splice(i, 1);
     }
+  }
+}
+
+function handleInput() {
+  if (inputField) {
+    let val = inputField.value();
+    partnerMessage = val + ", 歡迎你";
+    inputField.value(''); // 清空輸入框
   }
 }
 
