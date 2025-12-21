@@ -1,4 +1,5 @@
 let idleSheet, walkSheet, jumpSheet, attackSheet, projectileSheet, partnerSheet, partner2Sheet, partner2TouchSheet, partnerSmileSheet, partnerFallSheet;
+let bgImage;
 let idleAnim = [];
 let walkAnim = [];
 let jumpAnim = [];
@@ -12,6 +13,8 @@ let partner2TouchAnim = [];
 let projectiles = []; // 用於存放所有投射物
 let partnerMessage = "需要我解答嗎?";
 let inputField;
+let quizTable; // 存放測驗卷資料
+let currentQuestionRow = null; // 當前題目資料
 
 // 角色位置與狀態
 let characterX, characterY;
@@ -94,6 +97,7 @@ function preload() {
   partner2TouchSheet = loadImage('3/touch/touch_3.png');
   partnerSmileSheet = loadImage('2/smile/smile_2.png');
   partnerFallSheet = loadImage('2/fall_down/fall_down_2.png');
+  bgImage = loadImage('背景/background_1.png');
 }
 
 function setup() {
@@ -102,7 +106,7 @@ function setup() {
 
   // 初始化角色位置在畫面中央
   characterX = windowWidth / 2;
-  characterY = windowHeight / 2;
+  characterY = windowHeight - 130;
 
   // 初始化新角色位置 (固定在初始畫面的左方，不受主角後續移動影響)
   partnerX = characterX - 250;
@@ -181,11 +185,32 @@ function setup() {
     let frame = partner2TouchSheet.get(i * partner2FrameWidth, 0, partner2FrameWidth, partner2SheetHeight);
     partner2TouchAnim.push(frame);
   }
+
+  // --- 產生 CSV 測驗卷資料 ---
+  quizTable = new p5.Table();
+  quizTable.addColumn('Question');
+  quizTable.addColumn('Answer');
+  quizTable.addColumn('CorrectFeedback');
+  quizTable.addColumn('IncorrectFeedback');
+  quizTable.addColumn('Hint');
+
+  for (let i = 0; i < 10; i++) {
+    let r = quizTable.addRow();
+    let a = floor(random(0, 10)); // 0-9
+    let b = floor(random(0, 10)); // 0-9
+    r.setString('Question', `${a} + ${b} = ?`);
+    r.setString('Answer', String(a + b));
+    r.setString('CorrectFeedback', '答對了！你好棒！');
+    r.setString('IncorrectFeedback', '答錯囉，再試試看！');
+    r.setString('Hint', '這是個位數加法');
+  }
+  // 下載 CSV 檔案 (模擬產生測驗卷)
+  saveTable(quizTable, 'math_quiz.csv');
 }
 
 function draw() {
   // 設定背景顏色
-  background('#fcddf2');
+  image(bgImage, 0, 0, width, height);
 
   // --- 狀態更新與輸入處理 ---
   if (isAttacking) {
@@ -218,12 +243,12 @@ function draw() {
     jumpFrame += 0.2; // 控制跳躍動畫播放速度，數值越小越慢
     if (jumpFrame >= jumpFrameCount) {
       isJumping = false;
-      characterY = windowHeight / 2; // 重設回地面位置
+      characterY = windowHeight - 130; // 重設回地面位置
     }
 
     // 確保角色不會掉到地面以下
-    if (characterY > windowHeight / 2) {
-        characterY = windowHeight / 2;
+    if (characterY > windowHeight - 130) {
+        characterY = windowHeight - 130;
     }
   } else {
     // --- 處理地面邏輯 (走路/站立) ---
@@ -272,6 +297,11 @@ function draw() {
       currentPartnerFrameCount = partnerSmileFrameCount;
       currentPartnerFrameWidth = partnerSmileFrameWidth;
 
+      // 如果目前顯示預設訊息，則開始抽題
+      if (partnerMessage === "需要我解答嗎?") {
+        pickQuestion();
+      }
+
       // --- 顯示角色2上方的文字 ---
       push();
       if (characterX < partnerX) {
@@ -288,18 +318,42 @@ function draw() {
       pop();
 
       // --- 顯示角色1上方的輸入框 ---
+      let labelText = "請作答";
+      textSize(20);
+      let labelW = textWidth(labelText);
+      let inputW = 150;
+      let padding = 10;
+      
+      // 計算版面配置：[黃色標籤] [輸入框]
+      let labelBoxW = labelW + 20; // 標籤背景寬度
+      let totalW = labelBoxW + padding + inputW;
+      let startX = characterX - totalW / 2;
+      let boxH = 40;
+      let boxY = characterY - 150;
+
+      push();
+      resetMatrix(); // 重置矩陣，確保 UI 繪製在正確的螢幕座標上，不受角色變形影響
+      rectMode(CORNER);
+      fill('yellow');
+      rect(startX, boxY - boxH / 2, labelBoxW, boxH, 5); // 繪製標籤背景
+      fill(0);
+      textAlign(CENTER, CENTER);
+      text(labelText, startX + labelBoxW / 2, boxY); // 繪製標籤文字
+      pop();
+
       if (!inputField) {
         inputField = createInput();
-        inputField.size(150);
+        inputField.size(inputW);
         inputField.changed(handleInput); // 設定按下 Enter 後的處理函式
       }
-      inputField.position(characterX - 75, characterY - 150); // 讓輸入框跟隨角色1
+      inputField.position(startX + labelBoxW + padding, boxY - 12); // 讓輸入框跟隨角色1，位於標籤右側
     } else {
       // --- 當角色遠離時，移除輸入框並重置訊息 ---
       if (inputField) {
         inputField.remove();
         inputField = null;
         partnerMessage = "需要我解答嗎?";
+        currentQuestionRow = null;
       }
     }
 
@@ -428,8 +482,26 @@ function updateAndDrawProjectiles() {
 function handleInput() {
   if (inputField) {
     let val = inputField.value();
-    partnerMessage = val + ", 歡迎你";
+    
+    if (currentQuestionRow) {
+      // 比對答案 (去除前後空白)
+      if (val.trim() === currentQuestionRow.getString('Answer')) {
+        partnerMessage = currentQuestionRow.getString('CorrectFeedback');
+        // 答對後延遲 2 秒出下一題
+        setTimeout(pickQuestion, 2000);
+      } else {
+        partnerMessage = currentQuestionRow.getString('IncorrectFeedback');
+      }
+    }
     inputField.value(''); // 清空輸入框
+  }
+}
+
+function pickQuestion() {
+  if (quizTable && quizTable.getRowCount() > 0) {
+    let r = floor(random(quizTable.getRowCount()));
+    currentQuestionRow = quizTable.getRow(r);
+    partnerMessage = currentQuestionRow.getString('Question');
   }
 }
 
